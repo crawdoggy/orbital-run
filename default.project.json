@@ -1,0 +1,27 @@
+{
+  "name": "OrbitalRun",
+  "tree": {
+    "$className": "DataModel",
+    "Workspace": {
+      "$className": "Workspace"
+    },
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage"
+    },
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "OrbitalRun": {
+        "$path": "src/server/OrbitalRun.server.lua"
+      }
+    },
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "OrbitalRunClient": {
+          "$path": "src/client/OrbitalRun.client.lua"
+        }
+      }
+    }
+  }
+}
