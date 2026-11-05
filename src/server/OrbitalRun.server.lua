@@ -6,6 +6,13 @@ local Workspace = game:GetService("Workspace")
 local FLOOR_Y = 10
 local COURSE_FOLDER_NAME = "OrbitalRunCourse"
 local REMOTE_NAME = "OrbitalRunStatus"
+local FINAL_CHECKPOINT = 5
+local RESPAWN_SECONDS = 1
+local RETURN_TO_START_DELAY = 2.5
+local DRIFT_END_PAUSE = 0.5
+
+-- Obby deaths are frequent; the default 5-second respawn feels sluggish.
+Players.RespawnTime = RESPAWN_SECONDS
 
 local courseFolder = Workspace:FindFirstChild(COURSE_FOLDER_NAME)
 if courseFolder then
@@ -62,14 +69,15 @@ local function makePlatform(name, x, z, sizeX, sizeZ, y)
 		false
 	)
 	trim.CanTouch = false
-	return platform
+	return platform, trim
 end
 
 local function makeCheckpoint(index, name, x)
 	local platform = makePlatform(name .. " Platform", x, 0, 20, 20)
+	-- The pad spans the platform's full width so a run can't skip it by walking around the edge.
 	local pad = makePart(
 		name,
-		Vector3.new(8, 0.35, 8),
+		Vector3.new(8, 0.35, 19.6),
 		Vector3.new(x, FLOOR_Y + 1.18, 0),
 		colors.checkpoint,
 		Enum.Material.Neon,
@@ -77,6 +85,62 @@ local function makeCheckpoint(index, name, x)
 	)
 	pad:SetAttribute("CheckpointIndex", index)
 	return platform, pad
+end
+
+-- Moving platforms are physics-driven (PrismaticConstraint servo) rather than tweened while
+-- anchored: a tweened anchored part slides out from under characters instead of carrying them,
+-- and its movement replicates to clients in visible steps.
+local function makeDriftingPlatform(index, x, offset, travelTime)
+	local platform, trim = makePlatform("Drifting Platform " .. index, x, 0, 15, 13)
+	local slideAxis = CFrame.fromMatrix(Vector3.zero, Vector3.zAxis, Vector3.yAxis)
+
+	local anchor = makePart(
+		platform.Name .. " Track",
+		Vector3.new(1, 1, 1),
+		platform.Position,
+		colors.deck,
+		Enum.Material.Metal,
+		false
+	)
+	anchor.Transparency = 1
+	anchor.CanTouch = false
+	anchor.CanQuery = false
+
+	local trackAttachment = Instance.new("Attachment")
+	trackAttachment.CFrame = slideAxis
+	trackAttachment.Parent = anchor
+	local platformAttachment = Instance.new("Attachment")
+	platformAttachment.CFrame = slideAxis
+	platformAttachment.Parent = platform
+
+	trim.Anchored = false
+	trim.Massless = true
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = platform
+	weld.Part1 = trim
+	weld.Parent = platform
+
+	local slider = Instance.new("PrismaticConstraint")
+	slider.Attachment0 = trackAttachment
+	slider.Attachment1 = platformAttachment
+	slider.ActuatorType = Enum.ActuatorType.Servo
+	slider.ServoMaxForce = 1e8
+	slider.Speed = math.abs(offset) / travelTime
+	slider.TargetPosition = 0
+	slider.Parent = platform
+
+	platform.Anchored = false
+	platform:SetNetworkOwner(nil)
+
+	task.spawn(function()
+		local atOffset = false
+		while slider.Parent do
+			atOffset = not atOffset
+			slider.TargetPosition = if atOffset then offset else 0
+			task.wait(travelTime + DRIFT_END_PAUSE)
+		end
+	end)
+	return platform
 end
 
 local spawn = Instance.new("SpawnLocation")
@@ -98,7 +162,8 @@ end
 
 makeCheckpoint(1, "Checkpoint 1 - Airlock", 98)
 
-makePlatform("Crossing Approach", 119, 0, 30, 18)
+-- Adjacent decks butt edge to edge instead of overlapping; overlapping top faces flicker (z-fighting).
+makePlatform("Crossing Approach", 121, 0, 26, 18)
 makePlatform("Sweep Hazard Deck", 154, 0, 30, 18)
 local sweep = makePart(
 	"Red Sweep Hazard",
@@ -108,7 +173,13 @@ local sweep = makePart(
 	Enum.Material.Neon,
 	false
 )
-makePlatform("Crossing Exit", 181, 0, 28, 18)
+local sweepTween = TweenService:Create(
+	sweep,
+	TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+	{ Position = Vector3.new(154, FLOOR_Y + 2.25, 6) }
+)
+sweepTween:Play()
+makePlatform("Crossing Exit", 182, 0, 26, 18)
 makeCheckpoint(2, "Checkpoint 2 - Reactor", 210)
 
 local beamZ = { -4, 4, -4, 4, -4, 4 }
@@ -118,20 +189,14 @@ for index, x in ipairs(beamX) do
 end
 makeCheckpoint(3, "Checkpoint 3 - Comms", 342)
 
-makePlatform("Platform Bay Entry", 360, 0, 28, 20)
+makePlatform("Platform Bay Entry", 363, 0, 22, 20)
 for index, x in ipairs({ 383, 407, 431, 455 }) do
-	local platform = makePlatform("Drifting Platform " .. index, x, 0, 15, 13)
 	local offset = if index % 2 == 0 then -5 else 5
-	local tween = TweenService:Create(
-		platform,
-		TweenInfo.new(2.4 + index * 0.15, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
-		{ Position = platform.Position + Vector3.new(0, 0, offset) }
-	)
-	tween:Play()
+	makeDriftingPlatform(index, x, offset, 2.4 + index * 0.15)
 end
 makeCheckpoint(4, "Checkpoint 4 - Docking Ring", 475)
 
-makePlatform("Laser Corridor", 500, 0, 48, 22)
+makePlatform("Laser Corridor", 499.5, 0, 29, 22)
 local laser = makePart(
 	"Moving Laser",
 	Vector3.new(3, 2.5, 7),
@@ -147,7 +212,7 @@ local laserTween = TweenService:Create(
 )
 laserTween:Play()
 
-for index, x in ipairs({ 540, 556, 572 }) do
+for index, x in ipairs({ 541, 556, 572 }) do
 	makePlatform("Final Jump " .. index, x, if index == 2 then 4 else 0, 14, 11)
 end
 makeCheckpoint(5, "Checkpoint 5 - Station Approach", 524)
@@ -264,19 +329,41 @@ Players.PlayerRemoving:Connect(function(player)
 	finishDebounce[player.UserId] = nil
 end)
 
+local function setCheckpoint(player, index)
+	player:SetAttribute("CheckpointIndex", index)
+	player:SetAttribute("CheckpointName", checkpointNames[index])
+end
+
 finish.Touched:Connect(function(hit)
-	local player = playerFromHit(hit)
-	if not player or finishDebounce[player.UserId] then
+	local player, humanoid = playerFromHit(hit)
+	if not player or not humanoid or humanoid.Health <= 0 or finishDebounce[player.UserId] then
 		return
 	end
 	finishDebounce[player.UserId] = true
+
+	-- A win only counts after the last checkpoint, and it starts a fresh run, so standing
+	-- in the beacon can't farm wins.
+	if (player:GetAttribute("CheckpointIndex") or 0) < FINAL_CHECKPOINT then
+		statusRemote:FireClient(player, "Missed a checkpoint. Touch every cyan pad to finish.")
+		task.delay(3, function()
+			finishDebounce[player.UserId] = nil
+		end)
+		return
+	end
+
 	local leaderstats = player:FindFirstChild("leaderstats")
 	local wins = leaderstats and leaderstats:FindFirstChild("Wins")
 	if wins then
 		wins.Value += 1
 	end
-	statusRemote:FireClient(player, "Station 7 reached! Run complete.")
-	task.delay(4, function()
+	setCheckpoint(player, 0)
+	statusRemote:FireClient(player, "Station 7 reached! Run complete. Returning to Launch Bay...")
+
+	local character = humanoid.Parent
+	task.delay(RETURN_TO_START_DELAY, function()
 		finishDebounce[player.UserId] = nil
+		if player.Parent and player.Character == character and humanoid.Health > 0 then
+			character:PivotTo(checkpointCFrames[0])
+		end
 	end)
 end)

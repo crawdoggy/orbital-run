@@ -19,7 +19,16 @@ To create a place file instead, run `rojo build -o OrbitalRun.rbxlx` and open th
 
 ## Controls
 
-Use **WASD** or the arrow keys to move and **Space** to jump. Reach each cyan checkpoint pad to save your progress for the current server. Red moving hazards and falling below the course reset you to your latest checkpoint. Touch the gold finish beacon to record a win.
+Use **WASD** or the arrow keys to move and **Space** to jump. Cross each cyan checkpoint strip to save your progress for the current server. Red moving hazards and falling below the course reset you to your latest checkpoint, with a one-second respawn. After the fifth checkpoint, touch the gold finish beacon to record a win; you are then sent back to Launch Bay for another run. Reaching the beacon without the fifth checkpoint records nothing.
+
+## Playtest checklist
+
+These behaviors depend on Roblox physics and have not yet been confirmed in Studio:
+
+- The four drifting platforms carry you smoothly as they slide, including at each end where they pause and reverse.
+- The red sweep on the second deck moves side to side, and the laser in the corridor moves diagonally.
+- No deck surfaces flicker where platforms meet.
+- Finishing adds exactly one win and returns you to Launch Bay about 2.5 seconds later.
 
 ## Checks
 
